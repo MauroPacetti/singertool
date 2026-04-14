@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/singertool/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="gobbo_app">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>SingerTool</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!-- jsPDF per generare PDF da screenshot -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+
+  <!-- PDF.js per rendering PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+  <script type="module">
+    import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+
+    // Renderizza tutte le pagine di un PDF come immagini base64
+    window.renderPdfPages = async function(pdfBase64, scale) {
+      try {
+        const binaryStr = atob(pdfBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const pdf = await pdfjsLib.getDocument({data: bytes}).promise;
+        const pages = [];
+        const s = scale || 2.0;
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({scale: s});
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          await page.render({canvasContext: ctx, viewport: viewport}).promise;
+          pages.push(canvas.toDataURL('image/png'));
+        }
+        return JSON.stringify(pages);
+      } catch (e) {
+        console.error('PDF render error:', e);
+        return JSON.stringify([]);
+      }
+    };
+  </script>
+
+  <!-- Tesseract.js per OCR immagini -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script>
+    // Funzione globale chiamata da Dart per OCR
+    async function ocrRecognize(imageBase64, langs) {
+      try {
+        const worker = await Tesseract.createWorker(langs || 'por+ita+eng+spa');
+        const { data: { text } } = await worker.recognize('data:image/png;base64,' + imageBase64);
+        await worker.terminate();
+        return text;
+      } catch (e) {
+        return 'Errore OCR: ' + e.toString();
+      }
+    }
+    // Cattura il canvas Flutter come immagine
+    function captureScreenAsImage() {
+      // Flutter web renders to a canvas element
+      const canvas = document.querySelector('flt-glass-pane')?.shadowRoot?.querySelector('canvas')
+                  || document.querySelector('canvas');
+      if (canvas) {
+        return canvas.toDataURL('image/png', 1.0);
+      }
+      return '';
+    }
+
+    // Genera PDF dallo screenshot del canvas (A4 portrait)
+    function screenToPdf(fileName, action) {
+      const imgData = captureScreenAsImage();
+      if (!imgData) { alert('Impossibile catturare lo schermo'); return; }
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // A4: 210 x 297 mm
+      // Calcola le proporzioni dell'immagine catturata
+      const img = new Image();
+      img.onload = function() {
+        const imgRatio = img.width / img.height;
+        const a4Ratio = 210 / 297;
+
+        let w, h, x, y;
+        if (imgRatio > a4Ratio) {
+          // Immagine più larga: fit width
+          w = 210;
+          h = 210 / imgRatio;
+          x = 0;
+          y = (297 - h) / 2;
+        } else {
+          // Immagine più alta: fit height
+          h = 297;
+          w = 297 * imgRatio;
+          x = (210 - w) / 2;
+          y = 0;
+        }
+
+        pdf.addImage(imgData, 'PNG', x, y, w, h);
+
+        if (action === 'download') {
+          pdf.save(fileName || 'singertool.pdf');
+        } else if (action === 'print') {
+          const pdfBlob = pdf.output('blob');
+          const url = URL.createObjectURL(pdfBlob);
+          const w2 = window.open(url);
+          if (w2) { w2.onload = function() { w2.print(); }; }
+        } else if (action === 'blob') {
+          // Return base64 for replacing original
+          const base64 = pdf.output('datauristring').split(',')[1];
+          window._lastPdfBase64 = base64;
+        }
+      };
+      img.src = imgData;
+    }
+
+    // Download PDF dallo screenshot
+    function downloadScreenPdf(fileName) {
+      screenToPdf(fileName, 'download');
+    }
+
+    // Stampa PDF dallo screenshot
+    function printScreenPdf() {
+      screenToPdf('print.pdf', 'print');
+    }
+
+    // Genera PDF e ritorna bytes come base64
+    async function generateScreenPdfBase64() {
+      const imgData = captureScreenAsImage();
+      if (!imgData) return '';
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function() {
+          const imgRatio = img.width / img.height;
+          const a4Ratio = 210 / 297;
+          let w, h, x, y;
+          if (imgRatio > a4Ratio) {
+            w = 210; h = 210 / imgRatio; x = 0; y = (297 - h) / 2;
+          } else {
+            h = 297; w = 297 * imgRatio; x = (210 - w) / 2; y = 0;
+          }
+          pdf.addImage(imgData, 'PNG', x, y, w, h);
+          const base64 = pdf.output('datauristring').split(',')[1];
+          resolve(base64);
+        };
+        img.src = imgData;
+      });
+    }
+
+    // Vecchie funzioni per compatibilità con PDF bytes diretti
+    function downloadPdfFile(base64Data, fileName) {
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], {type: 'application/pdf'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || 'singertool.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function printPdfFile(base64Data) {
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], {type: 'application/pdf'});
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url);
+      if (w) { w.onload = function() { w.print(); }; }
+    }
+
+    // Download file generico
+    function downloadGenericFile(base64Data, fileName, mimeType) {
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], {type: mimeType || 'application/octet-stream'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
