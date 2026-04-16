@@ -94808,7 +94808,7 @@ s=l.a
 r=l.b
 n.aGs(s,r,(s+k.a)/2,(r+k.b)/2)}j=B.b.gL(i)
 n.dr(0,j.a,j.b)}a.fQ(n,p)},
-fn(a){return this.b!==a.b||this.c!=a.c}}
+fn(a){return!0}}
 A.Ev.prototype={
 av(){return new A.ZT()}}
 A.ZT.prototype={
