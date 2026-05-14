@@ -1,5 +1,0 @@
-Deploy v6.0.1: pen/highlighter fixes
-
-- Strokes on PDF now follow scroll & zoom (pdfx rendering)
-- Highlighter alpha preserved when exporting to PDF
-- Pen strokes in Revise mode now scale with text font size
