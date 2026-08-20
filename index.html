@@ -76,6 +76,54 @@
     };
   </script>
 
+  <!-- Google Picker: finestra "apri da Drive" per l'import di interi progetti -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script>
+    // Apre il Google Picker e risolve con un JSON dei file scelti:
+    //   [{"id": "...", "name": "...", "mimeType": "..."}]
+    // Array vuoto se l'utente chiude senza scegliere.
+    //
+    // Le cartelle sono selezionabili: lato Dart, se ne arriva una, ne viene
+    // elencato il contenuto. Il MULTISELECT resta attivo così chi preferisce
+    // può entrare nella cartella e prendere i file con Ctrl+A.
+    window.stPickFromDrive = function (oauthToken, developerKey, appId) {
+      return new Promise(function (resolve, reject) {
+        if (!window.gapi) {
+          reject('Google API not loaded (check your connection)');
+          return;
+        }
+        gapi.load('picker', function () {
+          try {
+            var view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+              .setIncludeFolders(true)
+              .setSelectFolderEnabled(true);
+
+            new google.picker.PickerBuilder()
+              .setOAuthToken(oauthToken)
+              .setDeveloperKey(developerKey)
+              .setAppId(appId)
+              .addView(view)
+              .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+              .setCallback(function (data) {
+                if (!data || !data.action) return;
+                if (data.action === google.picker.Action.PICKED) {
+                  resolve(JSON.stringify((data.docs || []).map(function (d) {
+                    return { id: d.id, name: d.name, mimeType: d.mimeType };
+                  })));
+                } else if (data.action === google.picker.Action.CANCEL) {
+                  resolve('[]');
+                }
+              })
+              .build()
+              .setVisible(true);
+          } catch (e) {
+            reject(String(e));
+          }
+        });
+      });
+    };
+  </script>
+
   <!-- Tesseract.js per OCR immagini -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
