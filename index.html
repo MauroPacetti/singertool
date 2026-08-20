@@ -83,9 +83,12 @@
     //   [{"id": "...", "name": "...", "mimeType": "..."}]
     // Array vuoto se l'utente chiude senza scegliere.
     //
-    // Le cartelle sono selezionabili: lato Dart, se ne arriva una, ne viene
-    // elencato il contenuto. Il MULTISELECT resta attivo così chi preferisce
-    // può entrare nella cartella e prendere i file con Ctrl+A.
+    // Le cartelle si vedono e ci si entra, ma NON sono selezionabili
+    // (setSelectFolderEnabled false). Con lo scope drive.file Google concede
+    // l'accesso al singolo file scelto, mai al contenuto di una cartella:
+    // selezionarla restituirebbe sempre zero file. Meglio che il Picker ci
+    // faccia entrare dentro, dove il MULTISELECT permette di prendere tutto
+    // con Ctrl+A.
     window.stPickFromDrive = function (oauthToken, developerKey, appId) {
       return new Promise(function (resolve, reject) {
         if (!window.gapi) {
@@ -96,7 +99,7 @@
           try {
             var view = new google.picker.DocsView(google.picker.ViewId.DOCS)
               .setIncludeFolders(true)
-              .setSelectFolderEnabled(true);
+              .setSelectFolderEnabled(false);
 
             new google.picker.PickerBuilder()
               .setOAuthToken(oauthToken)
